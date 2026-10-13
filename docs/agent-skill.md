@@ -86,6 +86,32 @@ su -c '/data/adb/ksud kpm unload x'                          # confirm exit + ho
 
 Auto-load at boot: drop `.kpm` files in `/data/adb/kpm/` (ksud booted_load; skipped in safe mode).
 
+## Reading another process's memory (on-device traps)
+
+Each of these cost a wrong answer on a live device — full write-up in
+`docs/il2cpp-kernel-read.md`:
+
+- **A kernel kthread cannot `filp_open("/proc/<pid>/maps")` for an app** — SELinux returns
+  `-ENOENT`. Walk VMAs via `find_vma(mm, addr)` in-kernel instead; `vm_area_struct` offsets are
+  randomized, probe them once (`vm_start 0x00 / vm_end 0x08 / vm_mm 0x10 / vm_flags 0x20 /
+  vm_pgoff 0x78` observed on 6.6.150).
+- **Hold an `mm` reference (`get_task_mm`), never a `task_struct`** — `put_task_struct` is a
+  static inline, not a symbol, so the refcount cannot be balanced. Read with
+  `access_remote_vm(mm, ...)`, release with `mmput()` at one point.
+- **`task_struct_offset` is only partly populated**: `comm_offset` is filled, `pid_offset`
+  stays -1. Get the pid via the real symbol `__task_pid_nr_ns(task, 0, NULL)`.
+- **Packed-game base trap**: the lib appears as TWO `file_off=0` mappings; the real base is
+  the one continuous with `r-xp`: `base = rx_map_start - text_vaddr`. The other mapping makes
+  `base + offset` land in a gap and read zeros — looks like a wrong offset, isn't.
+- **ARM MTE**: on-device pointers may carry a top-byte tag (`0xb4...`). Mask
+  `& 0x00FFFFFFFFFFFFFF` before using them as addresses, or reads silently fail.
+- **A struct-signature scan over anonymous rw regions produces false positives** (Java/Dalvik
+  regions match surprisingly often). Prefer a pointer chain from a static you derived by
+  disassembling an exported accessor (`il2cpp_*` getters are 1-2 instructions: `ldr x0,[x0,#off]`
+  IS the offset). Verify the whole chain end-to-end with one cheap self-test (print every
+  assembly name); if a scan hit's values never move while the game runs, it is not the live
+  array.
+
 ## Reporting
 
 Lead with: build command used, `ksud kpm load` result, dmesg evidence lines, and what was

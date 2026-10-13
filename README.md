@@ -11,6 +11,7 @@
 
     README.md                     ← 本文：完整实战笔记
     docs/agent-skill.md           ← 精炼版检查清单（给 AI/脚本用）
+    docs/il2cpp-kernel-read.md     ← 内核态读 IL2CPP 游戏进程（基址/MTE/VMA/偏移/findclass）
     templates/kpm_min.c           ← 最小模块骨架（带注释）
     examples/kpm-lab-demo/        ← 可直接构建运行的示例模块
     scripts/kpm.sh                ← build/push/load/ctl/unload/log 快捷脚本
